@@ -116,6 +116,8 @@ public class AutoScalingDemo implements TraceExhaustionCallback {
 		cloud = DCCreation.createDataCentre(FirstFitScheduler.class, SchedulingDependentMachines.class, nodes, cores);
 		// Wait until the PM Controllers finish their initial activities
 		Timed.simulateUntilLastEvent();
+		
+		
 		// Set up our energy meter for the whole cloud
 		energymeter = new IaaSEnergyMeter(cloud);
 		// Initialise the virtual infrastructue of ours on the cloud
@@ -124,10 +126,14 @@ public class AutoScalingDemo implements TraceExhaustionCallback {
 
 		// Simple job dispatching mechanism which first prepares the workload
 		Progress progress = new Progress(this);
-		JobLauncher launcher = new FirstFitJobScheduler(vi, progress);
+		
+		JobLauncher launcher = new AlternativeJobScheduler(vi, progress);
+		//JobLauncher launcher = new FirstFitJobScheduler(vi, progress);
 		QueueManager qm = new QueueManager(launcher);
 		jobhandler = new JobArrivalHandler(FileBasedTraceProducerFactory.getProducerFromFile(traceFileLoc, 0, 1000000,
 				false, nodes * cores, DCFJob.class), launcher, qm, progress);
+		
+		
 		jobhandler.processTrace();
 
 		// Collecting basic monitoring information
@@ -161,11 +167,9 @@ public class AutoScalingDemo implements TraceExhaustionCallback {
 			totutil += (pm.getTotalProcessed() - preProcessingRecords.get(pm))
 					/ (simuTimespan * pm.getPerTickProcessingPower());
 		}
-		System.out.println("Average utilisation of PMs: " + 100 * totutil / cloud.machines.size() + " %");
+		System.out.println("Average utilisation of PMs: " + totutil / cloud.machines.size());
 		System.out.println("Total power consumption: " + energymeter.getTotalConsumption() / 1000 / 3600000 + " kWh");
-		System.out.println("Average queue time: " + jobhandler.getAverageQueueTime() + " s");
-		System.out.println("Number of virtual appliances registered at the end of the simulation: "
-				+ cloud.repositories.get(0).contents().size());
+		System.out.println("Average queue time: " + jobhandler.getAverageQueueTime());
 	}
 
 	/**
