@@ -36,13 +36,13 @@ public class PredictiveAutoScaler extends VirtualInfrastructure {
 	private int counter =0;
 	private int threshHold =20;
 	
-	private static List<String> allJobsWithExecutablenames = new ArrayList<String>();
+	private static List<String> allJobsExecutableNamesInQueue = new ArrayList<String>();
 	
 	public static void loadJobsNames(){
 		List<Job> getAllJobs = JobArrivalHandler.getJobs();
 		//List<String> allJobsWithExecutablenames = new ArrayList<String>();
 		for (int i =0; i < getAllJobs.size(); i++) {
-			allJobsWithExecutablenames.add(getAllJobs.get(i).executable);
+			allJobsExecutableNamesInQueue.add(getAllJobs.get(i).executable);
 			}
 	}
 	
@@ -63,27 +63,42 @@ public class PredictiveAutoScaler extends VirtualInfrastructure {
 	 */
 	@Override
 	public void tick(long fires) {
-		// Regular operation, the actual "autoscaler"
-
 		final Iterator<String> kinds = vmSetPerKind.keySet().iterator();
 		
+		//Get current queue's list of jobs
 		QueueManager test = AutoScalingDemo.getQueue();
 		ArrayList<String> carriedQM  = new ArrayList<String>();
 		carriedQM.addAll(test.getQueue().keySet());
 		
-		//Target to test thresh hold
-		String tooManyOfKind = "http://upload";
+		//Target to test threshold
+		String tooManyOfKind = "http://en";
 		
 		//Start predictive analysis
-		for (String aString : allJobsWithExecutablenames) {
-		if(aString.equals(tooManyOfKind)) {
-		 counter++;
-		}
+		boolean endCheck =false;
+		for (String aString : carriedQM) {
+			
+			//Does target job exist in current queue
+			if(aString.equals(tooManyOfKind)) {
 		
-		if (counter == threshHold) {
-			requestVM(aString);
-			counter=0;
-			break;
+				//Does target job exist in all jobs in trace file 
+				for (String searchString : allJobsExecutableNamesInQueue) {
+					if(searchString.equals(aString)) {
+						 counter++;
+						
+					}
+					//Has the number of jobs that are of the same kind as target job exist in trace file.
+					//If yes, request new VM for this kind, and will destroy later when queue has finished
+					if (counter == threshHold) {
+						requestVM(tooManyOfKind);
+						counter=0;
+						endCheck =true;
+						break;
+						}
+				}
+				
+				if(endCheck) {
+					break;
+				}
 			}
 	}
 	
@@ -140,12 +155,12 @@ public class PredictiveAutoScaler extends VirtualInfrastructure {
 				}
 			}
 		}
+		//At this point, this is the end of queue manager in this instance of tick method called.
 		boolean exit =false;
-		//End of queue manager in this instance of method call
 		for (ArrayList<VirtualMachine> aVM : vmSetPerKind.values()) {
 			
 			for (VirtualMachine innerVM : aVM) {
-				
+				//Ensure only destroyed state VM's are destroyed
 				if(innerVM.getState() == State.DESTROYED){
 					if(innerVM.getVa().id.equals(tooManyOfKind)){
 						destroyVM(innerVM);
