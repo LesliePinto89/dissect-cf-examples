@@ -1,0 +1,162 @@
+package uk.ac.ljmu.fet.cs.cloud.examples.autoscaler;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.SplittableRandom;
+
+import hu.mta.sztaki.lpds.cloud.simulator.helpers.job.Job;
+import hu.mta.sztaki.lpds.cloud.simulator.iaas.IaaSService;
+import hu.mta.sztaki.lpds.cloud.simulator.iaas.VirtualMachine;
+import hu.mta.sztaki.lpds.cloud.simulator.iaas.VirtualMachine.State;
+
+public class PredictiveAutoScaler extends VirtualInfrastructure {
+
+	/**
+	 * The number of VMs we should keep unused.
+	 */
+	public static final int poolHeadRoom = 4;
+	private static final SplittableRandom rnd = new SplittableRandom(0);
+	/**
+	 * We keep track of how many times we found the last VMs completely unused for
+	 * an particular executable
+	 */
+	private final HashMap<String, Integer> unnecessaryHits = new HashMap<String, Integer>();
+
+	/**
+	 * Initialises the auto scaling mechanism
+	 * 
+	 * @param cloud the physical infrastructure to use to rent the VMs from
+	 */
+	public PredictiveAutoScaler(final IaaSService cloud) {
+		super(cloud);
+	}
+	
+	private int counter =0;
+	private int threshHold =20;
+	
+	private static List<String> allJobsWithExecutablenames = new ArrayList<String>();
+	
+	public static void loadJobsNames(){
+		List<Job> getAllJobs = JobArrivalHandler.getJobs();
+		//List<String> allJobsWithExecutablenames = new ArrayList<String>();
+		for (int i =0; i < getAllJobs.size(); i++) {
+			allJobsWithExecutablenames.add(getAllJobs.get(i).executable);
+			}
+	}
+	
+
+	/**
+	 * The auto scaling mechanism that is run regularly to determine if the virtual
+	 * infrastructure needs some changes. The logic is the following:
+	 * <ul>
+	 * <li>if we have fewer VMs than the minimum pool headroom, we will create a
+	 * VM</li>
+	 * <li>if we have fewer unused VMs than the minimum pool headroom, we will
+	 * create a VM</li>
+	 * <li>if all VMs are unused, we will consider the pool to be completely
+	 * destroyed after an hour of disuse</li>
+	 * <li>if we have more VMs unused than the pool headroom we will destroy one of
+	 * the unused ones.</li>
+	 * </ul>
+	 */
+	@Override
+	public void tick(long fires) {
+		// Regular operation, the actual "autoscaler"
+
+		final Iterator<String> kinds = vmSetPerKind.keySet().iterator();
+		
+		QueueManager test = AutoScalingDemo.getQueue();
+		ArrayList<String> carriedQM  = new ArrayList<String>();
+		carriedQM.addAll(test.getQueue().keySet());
+		
+		//Target to test thresh hold
+		String tooManyOfKind = "http://upload";
+		
+		//Start predictive analysis
+		for (String aString : allJobsWithExecutablenames) {
+		if(aString.equals(tooManyOfKind)) {
+		 counter++;
+		}
+		
+		if (counter == threshHold) {
+			requestVM(aString);
+			counter=0;
+			break;
+			}
+	}
+	
+		while (kinds.hasNext()) {
+			final String kind = kinds.next();
+			final ArrayList<VirtualMachine> vmset = vmSetPerKind.get(kind);
+			
+			// Determining if we need a brand new kind of VM:
+			if (vmset.size() < poolHeadRoom) {
+				// Not enough VMs with this kind yet, we need at least the X for each so let's
+				// create one (X being the headroom defined as a constant for the class)
+				requestVM(kind);
+			} 
+			else {
+				// Let's detect the current VM utilisation pattern
+				final ArrayList<VirtualMachine> unusedVMs = new ArrayList<VirtualMachine>();
+				for (final VirtualMachine vm : vmset) {
+					if (vm.underProcessing.isEmpty() && vm.toBeAdded.isEmpty()) {
+						unusedVMs.add(vm);
+					}
+				}
+				if (unusedVMs.size() < poolHeadRoom) {
+					// Too many VMs are used in the pool, we need to increase the VM count so new
+					// tasks can already arrive for ready and unused VMs
+					requestVM(kind);
+				} else if (vmset.size() == unusedVMs.size()) {
+					// All VMs are unused, the pool might be unnecessary after all.
+					Integer i = unnecessaryHits.get(kind);
+					if (i == null) {
+						unnecessaryHits.put(kind, 1);
+					} else {
+						i++;
+						if (i < 30) {
+							// It is not unnecessary yet, we just keep count on how many times we seen this
+							// pool unused
+							unnecessaryHits.put(kind, i);
+						} else {
+							// After an hour of disuse, we just drop the VMs
+							unnecessaryHits.remove(kind);
+							while (!vmset.isEmpty()) {
+								destroyVM(vmset.get(vmset.size() - 1));
+							}
+							kinds.remove();
+						}
+					}
+				} else {
+					// We have some of our VMs doing stuff, so we don't want the current round to
+					// count towards the unnecessary hits.
+					unnecessaryHits.remove(kind);
+					if (unusedVMs.size() > poolHeadRoom) {
+						// We have more VMs than we need at the moment, we will drop one
+						destroyVM(unusedVMs.get(rnd.nextInt(unusedVMs.size())));
+					}
+				}
+			}
+		}
+		boolean exit =false;
+		//End of queue manager in this instance of method call
+		for (ArrayList<VirtualMachine> aVM : vmSetPerKind.values()) {
+			
+			for (VirtualMachine innerVM : aVM) {
+				
+				if(innerVM.getState() == State.DESTROYED){
+					if(innerVM.getVa().id.equals(tooManyOfKind)){
+						destroyVM(innerVM);
+						exit =true;
+						break;
+					}
+				}	
+			}
+			if(exit){
+				break;
+			}	
+		}
+	}
+}
