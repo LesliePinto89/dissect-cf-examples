@@ -80,6 +80,9 @@ public class JobArrivalHandler extends Timed {
 			final Progress pr) throws TraceManagementException {
 		// Preparing the workload
 		jobs = trace.getAllJobs();
+		
+		
+		
 		System.out.println("Number of loaded jobs: " + jobs.size());
 		// Ensuring they are listed in submission order
 		Collections.sort(jobs, JobListAnalyser.submitTimeComparator);
