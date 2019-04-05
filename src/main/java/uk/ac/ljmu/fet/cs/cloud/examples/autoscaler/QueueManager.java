@@ -53,6 +53,10 @@ class QueueManager extends Timed {
 	 */
 	private final HashMap<String, ArrayDeque<Job>> queued = new HashMap<String, ArrayDeque<Job>>();
 
+	public HashMap<String, ArrayDeque<Job>> getQueue(){
+		return queued;
+	}
+	
 	/**
 	 * Saves the input parameter
 	 * 
