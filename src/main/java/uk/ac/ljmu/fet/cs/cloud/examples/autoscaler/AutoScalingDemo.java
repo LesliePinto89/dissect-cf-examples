@@ -84,6 +84,9 @@ public class AutoScalingDemo implements TraceExhaustionCallback {
 	 */
 	private final JobArrivalHandler jobhandler;
 
+	private static QueueManager qm;
+	
+	
 	/**
 	 * Callback handler to do finalise the simulation once all jobs have completed.
 	 */
@@ -109,31 +112,27 @@ public class AutoScalingDemo implements TraceExhaustionCallback {
 	 * @throws Exception If the trace cannot be loaded, or if there are some
 	 *                   configuration issue.
 	 */
-	public AutoScalingDemo(int cores, int nodes, String traceFileLoc) throws Exception {
+	public AutoScalingDemo(int cores, int nodes, String traceFileLoc, Class<? extends VirtualInfrastructure> viclass)
+			throws Exception {
 		if (cores < 4)
 			throw new InvalidParameterException("Per PM core count cannot be lower than 4");
 		// Prepares the datacentre
 		cloud = DCCreation.createDataCentre(FirstFitScheduler.class, SchedulingDependentMachines.class, nodes, cores);
 		// Wait until the PM Controllers finish their initial activities
 		Timed.simulateUntilLastEvent();
-		
-		
 		// Set up our energy meter for the whole cloud
 		energymeter = new IaaSEnergyMeter(cloud);
 		// Initialise the virtual infrastructue of ours on the cloud
-		vi = new VirtualInfrastructure(cloud);
+		System.err.println("Using the auto scaler: " + viclass.getName());
+		vi = viclass.getConstructor(IaaSService.class).newInstance(cloud);
 		vi.startAutoScaling();
 
 		// Simple job dispatching mechanism which first prepares the workload
 		Progress progress = new Progress(this);
-		
-		JobLauncher launcher = new AlternativeJobScheduler(vi, progress);
-		//JobLauncher launcher = new FirstFitJobScheduler(vi, progress);
-		QueueManager qm = new QueueManager(launcher);
+		JobLauncher launcher = new FirstFitJobScheduler(vi, progress);
+		 qm = new QueueManager(launcher);
 		jobhandler = new JobArrivalHandler(FileBasedTraceProducerFactory.getProducerFromFile(traceFileLoc, 0, 1000000,
 				false, nodes * cores, DCFJob.class), launcher, qm, progress);
-		
-		
 		jobhandler.processTrace();
 
 		// Collecting basic monitoring information
@@ -143,8 +142,14 @@ public class AutoScalingDemo implements TraceExhaustionCallback {
 		}
 		// Collects energy related details in every hour
 		energymeter.startMeter(3600000, true);
+		PredictiveAutoScaler.loadJobsNames();
 	}
 
+	public static QueueManager getQueue() {
+		return qm;
+	}
+	
+	
 	/**
 	 * Start the simulation and print out the statistics about the performance of
 	 * the scaling and dispatching mechanisms applied in this simulation.
@@ -167,19 +172,31 @@ public class AutoScalingDemo implements TraceExhaustionCallback {
 			totutil += (pm.getTotalProcessed() - preProcessingRecords.get(pm))
 					/ (simuTimespan * pm.getPerTickProcessingPower());
 		}
-		System.out.println("Average utilisation of PMs: " + totutil / cloud.machines.size());
+		System.out.println("Average utilisation of PMs: " + 100 * totutil / cloud.machines.size() + " %");
 		System.out.println("Total power consumption: " + energymeter.getTotalConsumption() / 1000 / 3600000 + " kWh");
-		System.out.println("Average queue time: " + jobhandler.getAverageQueueTime());
+		System.out.println("Average queue time: " + jobhandler.getAverageQueueTime() + " s");
+		System.out.println("Number of virtual appliances registered at the end of the simulation: "
+				+ cloud.repositories.get(0).contents().size());
 	}
 
 	/**
 	 * Sets up and starts the simulation of an auto-scaled virtual infrastructure
 	 * for a particular job trace.
 	 * 
-	 * @param args
+	 * list of CLI arguments:
+	 * <ol>
+	 * <li>The trace file</li>
+	 * <li>The number of CPU cores a single machine in the cloud should have</li>
+	 * <li>The number of physical machines the cloud should have</li>
+	 * <li>The auto scaler mechanism to be used in conjunction with the virtual
+	 * infrastructure that will run the jobs from the trace</li>
+	 * </ol>
+	 * 
+	 * @param args the CLI arguments
 	 * @throws Exception On any issue this application terminates with a stack trace
 	 */
 	public static void main(String[] args) throws Exception {
-		new AutoScalingDemo(Integer.parseInt(args[1]), Integer.parseInt(args[2]), args[0]).simulateAndprintStatistics();
+		new AutoScalingDemo(Integer.parseInt(args[1]), Integer.parseInt(args[2]), args[0],
+				(Class<? extends VirtualInfrastructure>) Class.forName(args[3])).simulateAndprintStatistics();
 	}
 }
