@@ -81,14 +81,14 @@ public class FirstFitJobScheduler implements JobLauncher, ConsumptionEvent {
 				final int vmsetsize = vmset.size();
 				for (int i = 0; i < vmsetsize; i++) {
 					final VirtualMachine vm = vmset.get(i);
-					if (VirtualMachine.State.RUNNING.equals(vm.getState()) && vm.underProcessing.isEmpty()
-							&& vm.toBeAdded.isEmpty()) {
+					if (VirtualMachine.State.RUNNING.equals(vm.getState()) && vm.underProcessing.size() <20
+							&& vm.toBeAdded.size() <1) {
 						// VM has the executable and does not do a thing, ready to accept the job
 
 						// Ignores the processor count of the task, assumes that the full VM will be
 						// used all the time
 						vm.newComputeTask(j.getExectimeSecs() * 1000 * vm.getPerTickProcessingPower(),
-								ResourceConsumption.unlimitedProcessing, this);
+								j.nprocs, this);
 						progress.registerDispatch();
 						j.started();
 
