@@ -42,7 +42,13 @@ public class JobArrivalHandler extends Timed {
 	/**
 	 * All jobs to be handled
 	 */
-	private final List<Job> jobs;
+	private static List<Job> jobs;
+	
+	public static List<Job> getJobs (){
+		return jobs;
+	}
+	
+	
 	private final int totaljobcount;
 	/**
 	 * The job scheduler to be used
@@ -55,6 +61,7 @@ public class JobArrivalHandler extends Timed {
 	/**
 	 * The job to be executed next
 	 */
+
 	private int currIndex = 0;
 
 	/**
