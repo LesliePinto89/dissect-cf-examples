@@ -1,6 +1,7 @@
 package uk.ac.ljmu.fet.cs.cloud.examples.autoscaler;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -46,6 +47,14 @@ public class PredictiveAutoScaler extends VirtualInfrastructure {
 			}
 	}
 	
+	// Gathers random value from collection of queue's executable names
+		public static <T> T random(Collection<T> coll) {
+			int num = (int) (Math.random() * coll.size());
+			for (T t : coll)
+				if (--num < 0)
+					return t;
+			throw new AssertionError();
+		}
 
 	/**
 	 * The auto scaling mechanism that is run regularly to determine if the virtual
@@ -70,8 +79,15 @@ public class PredictiveAutoScaler extends VirtualInfrastructure {
 		ArrayList<String> carriedQM  = new ArrayList<String>();
 		carriedQM.addAll(test.getQueue().keySet());
 		
-		//Target to test threshold
-		String tooManyOfKind = "http://en";
+		//Target to test threshold - Causes no lag in search 
+		//String tooManyOfKind = "http://en";
+		String tooManyOfKind ="";
+		
+		//Randomises target to check each tick method call, time output is good but debugging takes longer for some reason
+		if(carriedQM.size() !=0) {
+		 tooManyOfKind = random(carriedQM);
+		}
+		
 		
 		//Start predictive analysis
 		boolean endCheck =false;
